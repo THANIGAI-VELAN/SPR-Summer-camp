@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile containing gamification stats and roles.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "username": { "type": "string", "description": "Immutable permanent username" },
+        "role": { "type": "string", "enum": ["admin", "student"], "description": "User role" },
+        "xp": { "type": "number", "description": "Total XP earned" },
+        "level": { "type": "number", "description": "Current level based on XP" },
+        "rank": { "type": "string", "description": "Current rank based on XP" },
+        "streak": { "type": "number", "description": "Current day streak" },
+        "lastLogin": { "type": "number", "description": "Unix timestamp of last login" },
+        "badges": { "type": "array", "items": { "type": "string" }, "description": "Array of earned badge IDs" },
+        "createdAt": { "type": "number", "description": "Unix timestamp of account creation" }
+      },
+      "required": ["uid", "username", "role", "xp", "level", "rank", "streak", "lastLogin", "badges", "createdAt"]
+    },
+    "Assignment": {
+      "title": "Assignment",
+      "description": "A task or challenge created by an admin.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "xpReward": { "type": "number" },
+        "type": { "type": "string", "enum": ["standard", "challenge"] },
+        "assignedTo": { "type": "array", "items": { "type": "string" }, "description": "Array of student UIDs" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["title", "description", "xpReward", "type", "assignedTo", "createdAt"]
+    },
+    "Submission": {
+      "title": "Submission",
+      "description": "Record of a completed assignment by a student.",
+      "type": "object",
+      "properties": {
+        "assignmentId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "status": { "type": "string", "enum": ["completed"] },
+        "xpAwarded": { "type": "number" },
+        "completedAt": { "type": "number" }
+      },
+      "required": ["assignmentId", "studentId", "status", "xpAwarded", "completedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles."
+    },
+    "/assignments/{assignmentId}": {
+      "schema": { "$ref": "#/entities/Assignment" },
+      "description": "Stores assignments created by admins."
+    },
+    "/submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/Submission" },
+      "description": "Stores assignment completion records."
+    }
+  }
+}

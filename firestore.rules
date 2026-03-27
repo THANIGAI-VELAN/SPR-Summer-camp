@@ -1,0 +1,157 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: uid
+    // Fields:
+    //   - uid: string (required, immutable)
+    //   - username: string (required, immutable)
+    //   - role: string (required, 'admin' | 'student', immutable for students)
+    //   - xp: number (required)
+    //   - level: number (required)
+    //   - rank: string (required)
+    //   - streak: number (required)
+    //   - lastLogin: number (required)
+    //   - badges: list (required)
+    //   - createdAt: number (required, immutable)
+    //
+    // Collection: assignments
+    // Document ID: auto
+    // Fields:
+    //   - title: string (required)
+    //   - description: string (required)
+    //   - xpReward: number (required)
+    //   - type: string (required, 'standard' | 'challenge')
+    //   - assignedTo: list (required, strings)
+    //   - createdAt: number (required, immutable)
+    //
+    // Collection: submissions
+    // Document ID: auto
+    // Fields:
+    //   - assignmentId: string (required, immutable)
+    //   - studentId: string (required, immutable)
+    //   - status: string (required, 'completed')
+    //   - xpAwarded: number (required, immutable)
+    //   - completedAt: number (required, immutable)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == "thanigaivelan404@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['uid', 'username', 'role', 'xp', 'level', 'rank', 'streak', 'lastLogin', 'badges', 'createdAt']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 128 &&
+             data.username is string && data.username.size() > 0 && data.username.size() < 50 &&
+             data.role in ['admin', 'student'] &&
+             data.xp is number && data.xp >= 0 &&
+             data.level is number && data.level > 0 &&
+             data.rank is string && data.rank.size() > 0 && data.rank.size() < 10 &&
+             data.streak is number && data.streak >= 0 &&
+             data.lastLogin is number &&
+             data.badges is list &&
+             data.createdAt is number;
+    }
+
+    function isValidAssignment() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['title', 'description', 'xpReward', 'type', 'assignedTo', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.description is string && data.description.size() >= 0 && data.description.size() < 1000 &&
+             data.xpReward is number && data.xpReward > 0 &&
+             data.type in ['standard', 'challenge'] &&
+             data.assignedTo is list && data.assignedTo.size() <= 100 &&
+             data.createdAt is number;
+    }
+
+    function isValidSubmission() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['assignmentId', 'studentId', 'status', 'xpAwarded', 'completedAt']) &&
+             data.assignmentId is string && data.assignmentId.size() > 0 && data.assignmentId.size() < 128 &&
+             data.studentId is string && data.studentId.size() > 0 && data.studentId.size() < 128 &&
+             data.status == 'completed' &&
+             data.xpAwarded is number && data.xpAwarded > 0 &&
+             data.completedAt is number;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Admins can read all users. Students can read all users (for leaderboard).
+      allow read: if isAuthenticated();
+      
+      // Only admins can create users (or the default admin bootstrapping themselves)
+      allow create: if isAuthenticated() && isValidUser() && (isAdmin() || (isOwner(userId) && request.resource.data.role == 'admin' && request.auth.token.email == "thanigaivelan404@gmail.com"));
+      
+      // Admins can update any user. Students can update their own user document, but CANNOT change username, role, uid, createdAt.
+      allow update: if isAuthenticated() && isValidUser() && (
+        isAdmin() || 
+        (isOwner(userId) && areImmutableFieldsUnchanged(['uid', 'username', 'role', 'createdAt']))
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    match /assignments/{assignmentId} {
+      // Admins can read all assignments. Students can read assignments assigned to them.
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid in resource.data.assignedTo);
+      
+      allow create: if isAdmin() && isValidAssignment();
+      allow update: if isAdmin() && isValidAssignment() && areImmutableFieldsUnchanged(['createdAt']);
+      allow delete: if isAdmin();
+    }
+
+    match /submissions/{submissionId} {
+      // Admins can read all submissions. Students can read all submissions for the leaderboard.
+      allow read: if isAuthenticated();
+      
+      // Students can create a submission for themselves. Admins can create submissions.
+      allow create: if isAuthenticated() && isValidSubmission() && (
+        isAdmin() || 
+        (request.resource.data.studentId == request.auth.uid && 
+         exists(/databases/$(database)/documents/assignments/$(request.resource.data.assignmentId)) &&
+         request.auth.uid in get(/databases/$(database)/documents/assignments/$(request.resource.data.assignmentId)).data.assignedTo)
+      );
+      
+      // Submissions are immutable once created (for students). Admins can update/delete.
+      allow update: if isAdmin() && isValidSubmission() && areImmutableFieldsUnchanged(['assignmentId', 'studentId', 'completedAt']);
+      allow delete: if isAdmin();
+    }
+  }
+}
