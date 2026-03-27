@@ -171,10 +171,35 @@ export default function Login({ isAdminLogin = false }: LoginProps) {
               </div>
             </div>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex flex-col space-y-4">
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
+            <div className="text-sm text-zinc-400 text-center">
+              {isAdminLogin ? (
+                <>
+                  Are you a student?{' '}
+                  <button 
+                    type="button" 
+                    onClick={() => navigate('/login')} 
+                    className="text-primary hover:underline focus:outline-none"
+                  >
+                    Student Login
+                  </button>
+                </>
+              ) : (
+                <>
+                  Are you an admin?{' '}
+                  <button 
+                    type="button" 
+                    onClick={() => navigate('/admin/login')} 
+                    className="text-primary hover:underline focus:outline-none"
+                  >
+                    Admin Login
+                  </button>
+                </>
+              )}
+            </div>
           </CardFooter>
         </form>
       </Card>
