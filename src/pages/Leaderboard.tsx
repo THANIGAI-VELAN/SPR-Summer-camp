@@ -162,7 +162,7 @@ export default function Leaderboard() {
                       {entry.rank}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right font-bold text-primary">
+                  <TableCell className="text-right font-bold text-zinc-100">
                     {entry.xp}
                   </TableCell>
                 </TableRow>
